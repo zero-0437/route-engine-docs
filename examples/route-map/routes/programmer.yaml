@@ -1,0 +1,80 @@
+# examples/route-map/routes/programmer.yaml
+# 代码编写与调试 Agent — 示例规则
+
+agent: programmer
+priority: 2
+condition: Coding 任务（新功能/修 bug/重构）
+
+rules:
+  # ── keyword 精确匹配 ──
+  - type: keyword
+    pattern: TDD
+    weight: 1.0
+    skills: [test-driven-development]
+
+  - type: keyword
+    pattern: refactor
+    weight: 0.9
+    skills: [simplify-code]
+
+  # ── phrase 短语匹配 ──
+  - type: phrase
+    pattern: 写代码
+    weight: 0.8
+    skills: [spike]
+
+  - type: phrase
+    pattern: 实现新功能
+    weight: 1.0
+    skills: [spike]
+    fuzzy: true
+
+  - type: phrase
+    pattern: 修复 bug
+    weight: 0.9
+    skills: [test-driven-development]
+    fuzzy: true
+
+  # ── regex 正则匹配 ──
+  - type: regex
+    pattern: 写.*(函数|方法|class|类)
+    weight: 0.8
+    skills: [spike]
+
+  - type: regex
+    pattern: (重构|重构代码).*
+    weight: 0.9
+    skills: [simplify-code]
+
+  - type: regex
+    pattern: 实现.*(模块|功能|feature)
+    weight: 0.8
+    skills: [vertical-slice-tdd]
+
+  # ── fuzzy 模糊匹配 ──
+  - type: phrase
+    pattern: 编写单元测试
+    weight: 1.0
+    fuzzy: true
+    skills: [test-driven-development]
+
+  - type: phrase
+    pattern: 代码审查
+    weight: 0.7
+    fuzzy: true
+    skills: [systematic-debugging]
+
+  # ── 负权重排除规则 ──
+  - type: phrase
+    pattern: 简单查询
+    weight: -0.5
+    description: 排除不必要的编程路由
+
+# Chain 定义（内联）
+chain:
+  - agent: programmer
+    goal: 实现功能
+    type: serial
+  - agent: error-analyst
+    goal: 代码审查
+    type: serial

@@ -1,0 +1,36 @@
+# examples/route-map/shared.yaml
+# 共享规则 — 可被多个 Agent 引用
+
+rules:
+  # ── 通用问候 ──
+  - type: phrase
+    pattern: 你好
+    weight: 0.1
+    skills: [greeting]
+
+  - type: phrase
+    pattern: 早上好
+    weight: 0.1
+    skills: [greeting]
+
+  # ── 通用确认 ──
+  - type: phrase
+    pattern: 好的
+    weight: -0.1
+    description: 减少不必要路由
+
+  - type: phrase
+    pattern: 明白
+    weight: -0.1
+    description: 减少不必要路由
+
+  # ── 系统操作 ──
+  - type: keyword
+    pattern: 帮助
+    weight: 0.3
+    skills: [help]
+
+  - type: keyword
+    pattern: help
+    weight: 0.3
+    skills: [help]

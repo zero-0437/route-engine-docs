@@ -1,0 +1,87 @@
+# examples/route-map/routes/pm-agent.yaml
+# 技术架构师 + 执行调度者 — 示例规则
+
+agent: pm-agent
+priority: 1
+condition: 纯协调类（多 Agent 编排/跨域冲突/批量任务拆解）
+
+rules:
+  # ── 架构/拓扑 ──
+  - type: phrase
+    pattern: 架构
+    weight: 1.0
+    skills: [architecture-integrity-check]
+
+  - type: phrase
+    pattern: 拓扑
+    weight: 1.0
+    skills: [architecture-integrity-check]
+
+  - type: regex
+    pattern: 系统.*(设计|架构|结构)
+    weight: 1.0
+    skills: [engineering-software-architect]
+
+  # ── 拆解/方案/规划 ──
+  - type: phrase
+    pattern: 拆解
+    weight: 1.0
+    skills: [product-manager, plan]
+    fuzzy: true
+
+  - type: phrase
+    pattern: 技术选型
+    weight: 0.8
+    skills: [product-manager]
+    fuzzy: true
+
+  - type: phrase
+    pattern: 可行性报告
+    weight: 0.8
+    skills: [product-manager]
+    fuzzy: true
+
+  - type: phrase
+    pattern: 设计方案
+    weight: 0.6
+    skills: [product-manager, plan]
+    fuzzy: true
+
+  # ── 批量/协调 ──
+  - type: phrase
+    pattern: 批量任务
+    weight: 0.9
+    skills: [dispatching-parallel-agents]
+
+  - type: regex
+    pattern: 并行.*(执行|处理|运行)
+    weight: 0.8
+    skills: [dispatching-parallel-agents]
+
+  - type: phrase
+    pattern: 多 Agent 协调
+    weight: 1.0
+    skills: [multi-agent-arch]
+
+  # ── 需求/规格 ──
+  - type: phrase
+    pattern: 需求分析
+    weight: 0.8
+    skills: [spec-authoring, domain-modeling]
+    fuzzy: true
+
+  - type: phrase
+    pattern: 编写 PRD
+    weight: 0.9
+    skills: [spec-authoring]
+
+  - type: regex
+    pattern: 产品.*(需求|规划|路线图)
+    weight: 0.8
+    skills: [product-manager]
+
+  # ── 负权重排除 ──
+  - type: phrase
+    pattern: 简单实现
+    weight: -0.3
+    description: 编程类任务不路由到 pm-agent

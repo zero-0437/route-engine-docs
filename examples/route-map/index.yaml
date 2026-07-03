@@ -1,0 +1,41 @@
+# examples/route-map/index.yaml
+# 示例路由索引 — 展示完整路由配置
+
+defaults:
+  threshold: 0.5
+  margin: 0.3
+  priority: 99
+
+overrides:
+  - pattern: /debug
+    agent: programmer
+    chain_ref: debugger-chain
+  - pattern: /status
+    agent: pm-agent
+    description: 系统状态查询
+
+chain_keywords:
+  - keyword: 全流程开发
+    chain_ref: full-dev-chain
+  - keyword: 双评审
+    chain_ref: dual-review-chain
+  - keyword: 文档审查
+    chain_ref: doc-review-chain
+
+agents:
+  programmer:
+    condition: Coding 任务（新功能/修 bug/重构）
+    description: 代码编写与调试 — 按 TDD 纪律交付
+    file: routes/programmer.yaml
+    priority: 2
+  pm-agent:
+    condition: 纯协调类（多 Agent 编排/跨域冲突/任务拆解）
+    description: 技术架构师 + 执行调度者
+    file: routes/pm-agent.yaml
+    priority: 1
+  memory-agent:
+    condition: 记忆管理/知识库/历史对话搜索
+    description: 跨任务持久化记忆库
+    file: routes/memory-agent.yaml
+    priority: 9
+    chain_ref: memory-chain
