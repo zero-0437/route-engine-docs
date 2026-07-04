@@ -1,113 +1,86 @@
-# Hermes 零 Token 路由引擎
+# Hermes Zero Token Router
 
-> 纯 Python + YAML 驱动，替代 LLM 路由决策，**1ms / 0 token** 匹配。
+> Zero-token routing engine for Hermes Agent — intelligent agent dispatch via route-map, chain execution, and multi-review quality assurance.
 
-## 概述
+## Overview
 
-零 Token 路由引擎是 [Hermes Agent](https://hermes-agent.nousresearch.com) 的子 Agent 路由层。传统 Agent 系统依赖 LLM 本身来判断"把当前请求交给谁"——每次路由决策消耗数百到数千 token，且决策质量受模型温度和 prompt 影响大。本引擎将路由逻辑从 LLM 中剥离，用纯 YAML 规则 + Python 评分引擎替代。
+The **Zero Token Router** is a routing and execution framework for [Hermes Agent](https://hermes-agent.nousresearch.com). It enables zero-token-cost dispatch of tasks to specialized agent roles via a declarative route-map, with support for chained multi-agent workflows.
 
-**核心理念**：路由是确定性工程问题，不是 LLM 推理问题。
+### Key Components
 
-## 核心特性
+| Component | Path | Description |
+|---|---|---|
+| Route Engine | `src/route_engine.py` | Core routing logic — matches tasks to agents via pattern-based rules |
+| Chain Executor | `src/chain_executor.py` | Multi-step chain execution for sequential agent workflows |
+| Chain Config | `src/chain_config.py` | Configuration loader for chain definitions |
+| Route Logger | `src/route_logger.py` | Structured logging and analytics for route decisions |
 
-| 特性 | 说明 |
-|------|------|
-| **零 Token 开销** | 路由决策不消耗任何 LLM token |
-| **纯 YAML 配置** | route-map/ 目录即路由配置，所见即所得 |
-| **多层评分** | keyword / phrase / regex / fuzzy 四种匹配类型 |
-| **Chain 编排** | serial / parallel / interactive / loop 四种步骤 |
-| **强绑定** | unrouted 模式直接返回，无 LLM 兜底 |
-| **1ms 响应** | 冷启动 < 5ms，热缓存 < 1ms |
-| **技能绑定** | 规则可绑定特定技能，路由时自动加载 |
-| **事务保护** | 规则变更自动验证，失败自动回滚 |
+### Route Map
 
-## 快速开始
+| Directory | Description |
+|---|---|
+| `route-map/index.yaml` | Master routing index — agent definitions, patterns, and dispatch rules |
+| `route-map/routes/` | Per-agent route configurations (15 agents) |
+| `route-map/chains/` | Multi-agent chain definitions (8 chains) |
 
-### 1. 安装依赖
+### Agents
 
-```bash
-pip install pyyaml>=6.0
-```
+| Agent | File | Purpose |
+|---|---|---|
+| Triage | `routes/triage.yaml` | Initial request classification |
+| Programmer | `routes/programmer.yaml` | Code generation & engineering |
+| Spec Agent | `routes/spec-agent.yaml` | Specification authoring |
+| Docs Writer | `routes/docs-writer.yaml` | Documentation generation |
+| PM Agent | `routes/pm-agent.yaml` | Project management oversight |
+| Prompt Engineer | `routes/prompt-engineer.yaml` | Prompt design & optimization |
+| UI Designer | `routes/ui-designer.yaml` | Interface design |
+| Data Analyst | `routes/data-analyst.yaml` | Data analysis & visualization |
+| Error Analyst | `routes/error-analyst.yaml` | Error analysis & debugging |
+| Reality Checker | `routes/reality-checker.yaml` | Factual verification |
+| Dual Review | `routes/dual-review.yaml` | Collaborative review workflow |
+| Document Processor | `routes/document-processor.yaml` | Document processing |
+| File Ops | `routes/file-ops.yaml` | File operations |
+| Memory Agent | `routes/memory-agent.yaml` | Memory management |
+| Synology Helper | `routes/synology-helper.yaml` | Synology NAS operations |
 
-### 2. 编写路由规则
+### Chains
 
-创建 `route-map/index.yaml`：
+| Chain | File | Agents Involved |
+|---|---|---|
+| Triage Chain | `chains/triage-chain.yaml` | Triage → routing decision |
+| Programmer Chain | `chains/programmer-chain.yaml` | Spec → Programmer → Review |
+| Spec Agent Chain | `chains/spec-agent-chain.yaml` | Research → Spec → Review |
+| Dual Review Chain | `chains/dual-review-chain.yaml` | Dual independent review |
+| Research Chain | `chains/research-chain.yaml` | Research → Analysis → Report |
+| Debugger Chain | `chains/debugger-chain.yaml` | Error → Analysis → Fix |
+| Follow Process Chain | `chains/follow-process-chain.yaml` | Process enforcement |
+| Learn Chain | `chains/learn-chain.yaml` | Knowledge acquisition |
 
-```yaml
-agents:
-  programmer:
-    condition: Coding 任务
-    file: routes/programmer.yaml
-    priority: 2
-```
+### Changelog
 
-创建 `route-map/routes/programmer.yaml`：
+See [CHANGELOG.md](./CHANGELOG.md) for the complete version history.
 
-```yaml
-agent: programmer
-priority: 2
-rules:
-  - type: phrase
-    pattern: 写代码
-    weight: 1.0
-  - type: regex
-    pattern: 实现.*功能
-    weight: 0.8
-```
+### Quality Reviews
 
-### 3. 运行引擎
+All specifications, architecture, and code have undergone rigorous multi-round review:
 
-```python
-from route_engine import decide
+| Review | File |
+|---|---|
+| Spec Review (R1) | `reviews/spec-review.md` |
+| Quality Review (R1) | `reviews/quality-review.md` |
+| Architecture Review (R1) | `reviews/architecture-review.md` |
+| Spec Fix (R2) | `reviews/review-fix.md` |
+| Quality Fix (R2) | `reviews/quality-fix.md` |
+| Architecture Fix (R2) | `reviews/architecture-fix.md` |
+| Final Review (R3) | `reviews/final-review.md` |
+| Final Review 2 (R3) | `reviews/final-review2.md` |
+| Quality Final (R3) | `reviews/quality-final2.md` |
+| Architecture Final (R3) | `reviews/architecture-final2.md` |
 
-result = decide("帮我写一个 Python 脚本")
-print(result["agent"])       # → programmer
-print(result["confidence"])  # → 1.0
-```
+### Task Slice
 
-## 项目目录结构
+See [task-slice.md](./task-slice.md) for the complete task breakdown and implementation plan.
 
-```
-.
-├── README.md                 # 本文件
-├── ARCHITECTURE.md           # 系统架构说明
-├── ROUTE_MAP_SPEC.md         # route-map 目录规范
-├── CHAIN_EXECUTOR.md         # chain 编排引擎文档
-├── requirements.txt          # Python 依赖
-├── scripts/
-│   ├── route_engine.py       # 核心路由引擎
-│   ├── chain_executor.py     # chain 状态机引擎
-│   ├── validate-route-map.py # route-map 结构验证器（12 维审计）
-│   ├── hermes-route-add      # 规则追加 CLI
-│   ├── analyze-route-log.py  # 路由日志分析维护
-│   └── agent-mgmt/           # Agent 管理工具集
-│       ├── _yaml_ops.py
-│       ├── _validation.py
-│       ├── _transaction.py
-│       ├── _binding_table.py
-│       ├── _templates.py
-│       ├── _skills_patch.py
-│       └── templates/
-│           ├── agent-route.yaml.j2
-│           ├── agent-config.yaml.j2
-│           ├── binding-row.md.j2
-│           └── skill-entry.yaml.j2
-└── examples/
-    └── route-map/            # 示例路由规则
-        ├── index.yaml
-        ├── shared.yaml
-        └── routes/
-            ├── programmer.yaml
-            └── pm-agent.yaml
-```
+## License
 
-## 与 Hermes Agent 的集成
-
-1. **替代 LLM 路由**：在 `config.yaml` 中设置 `route_mode: zero-token`
-2. **规则热加载**：修改 route-map/ 文件后，引擎自动检测变更并重新加载
-3. **Chain 集成**：路由结果可触发 chain 执行链，自动编排多 Agent
-4. **日志审计**：所有路由决策写入 `logs/route-engine.jsonl`，支持 `analyze-route-log.py` 分析
-
-## 许可证
-
-MIT
+Private repository — internal use only.
