@@ -367,7 +367,8 @@ def _save_state(task_id: str, state: dict):
 
 
 def _build_step_result(step: dict, chain_owner: str, step_idx: int,
-                       chain_step_skills: dict, context: dict | None = None) -> dict:
+                       chain_step_skills: dict, context: dict | None = None,
+                       task_id: str = "") -> dict:
     """为单个 step 构建响应。支持 serial / parallel / interactive / loop 四种类型。
 
     如果 step 有 type 字段且不为 serial，委托给对应的专用构建函数。
@@ -420,17 +421,49 @@ def _build_step_result(step: dict, chain_owner: str, step_idx: int,
     else:
         key = f"{chain_owner}@{step_idx}"
         skills = chain_step_skills.get(key, [])
+
+        # ── 写 Step Brief 文件 ──
+        brief_dir = "/opt/data/.shared/briefs"
+        os.makedirs(brief_dir, exist_ok=True)
+        brief_path = os.path.join(brief_dir, f"{task_id}-step{step_idx}.md")
+
+        step_goal = step.get("goal", "")
+        step_keywords = step.get("keywords", [])
+        step_contract = step.get("completion_contract", [])
+
+        brief_lines = [
+            f"## Step Brief — {task_id}",
+            "",
+            f"### Agent",
+            step["agent"],
+            "",
+            f"### Goal",
+            step_goal,
+            "",
+            f"### Skills",
+            ", ".join(skills),
+            "",
+        ]
+        if step_keywords:
+            brief_lines += ["### Keywords", ", ".join(step_keywords), ""]
+        if step_contract:
+            brief_lines += ["### Completion Contract", json.dumps(step_contract, indent=2, ensure_ascii=False), ""]
+
+        with open(brief_path, "w") as f:
+            f.write("\n".join(brief_lines) + "\n")
+
         next_item = {
             "agent": step["agent"],
-            "goal": step.get("goal", ""),
+            "goal": f"读取 Brief 文件 {brief_path} 并执行",
             "skills": skills,
+            "brief_file": brief_path,
         }
-        if step.get("keywords"):
-            next_item["keywords"] = step["keywords"]
+        if step_keywords:
+            next_item["keywords"] = step_keywords
         return {
             "status": "CONTINUE",
             "next": next_item,
-            "context": {"chain_step": step_idx, "step_goal": step.get("goal", "")},
+            "context": {"chain_step": step_idx, "step_goal": step_goal},
         }
 
 
@@ -835,7 +868,8 @@ def _handle_batch_complete(task_id: str, state: dict, chain_def: list,
     _save_state(task_id, state)
     step = chain_def[state["current_step"]]
     return _build_step_result(step, chain_owner, state["current_step"],
-                              chain_step_skills, state.get("context", {}))
+                               chain_step_skills, state.get("context", {}),
+                               task_id=task_id)
 
 
 def _handle_branch_complete(task_id: str, state: dict, chain_def: list,
@@ -879,7 +913,8 @@ def _handle_branch_complete(task_id: str, state: dict, chain_def: list,
     _save_state(task_id, state)
     step = chain_def[state["current_step"]]
     return _build_step_result(step, chain_owner, state["current_step"],
-                              chain_step_skills, state.get("context", {}))
+                               chain_step_skills, state.get("context", {}),
+                               task_id=task_id)
 
 
 def _handle_loop_complete(task_id: str, state: dict, chain_def: list,
@@ -910,12 +945,14 @@ def _handle_loop_complete(task_id: str, state: dict, chain_def: list,
     _save_state(task_id, state)
     step = chain_def[state["current_step"]]
     return _build_step_result(step, chain_owner, state["current_step"],
-                              chain_step_skills, state.get("context", {}))
+                               chain_step_skills, state.get("context", {}),
+                               task_id=task_id)
 
 
 def _handle_serial_step(step: dict, chain_owner: str, step_idx: int,
                         chain_step_skills: dict,
-                        context: dict | None = None) -> dict:
+                        context: dict | None = None,
+                        task_id: str = "") -> dict:
     """处理 serial 类型的步骤构建（委托给 _build_step_result）。
 
     参数:
@@ -929,12 +966,14 @@ def _handle_serial_step(step: dict, chain_owner: str, step_idx: int,
         _build_step_result 的返回结果（CONTINUE 等）
     """
     return _build_step_result(step, chain_owner, step_idx,
-                              chain_step_skills, context)
+                              chain_step_skills, context,
+                              task_id=task_id)
 
 
 def _handle_parallel_step(step: dict, chain_owner: str, step_idx: int,
                           chain_step_skills: dict,
-                          context: dict | None = None) -> dict:
+                          context: dict | None = None,
+                          task_id: str = "") -> dict:
     """处理 parallel 类型的步骤构建（委托给 _build_step_result）。
 
     参数:
@@ -948,7 +987,8 @@ def _handle_parallel_step(step: dict, chain_owner: str, step_idx: int,
         _build_step_result 的返回结果（CONTINUE_PARALLEL 等）
     """
     return _build_step_result(step, chain_owner, step_idx,
-                              chain_step_skills, context)
+                              chain_step_skills, context,
+                              task_id=task_id)
 
 
 def advance(task_id: str, chain_def: list, chain_step_skills: dict,
@@ -1017,7 +1057,7 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
         _save_state(task_id, state)
 
         step = chain_def[0]
-        return _build_step_result(step, chain_owner, 0, chain_step_skills, state.get("context", {}))
+        return _build_step_result(step, chain_owner, 0, chain_step_skills, state.get("context", {}), task_id=task_id)
 
     try:
         state = _load_state(task_id)
@@ -1060,7 +1100,7 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
     # 空 status → 首次调用，返回当前步骤
     if not status:
         step = chain_def[step_idx]
-        return _build_step_result(step, chain_owner, step_idx, chain_step_skills, state.get("context", {}))
+        return _build_step_result(step, chain_owner, step_idx, chain_step_skills, state.get("context", {}), task_id=task_id)
     valid = STEP_VALID_STATUSES.get(step_type, ["DONE", "BLOCKED", "NEEDS_FIX", "NEEDS_CONTEXT"])
     if status not in valid:
         return {
@@ -1128,7 +1168,7 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
             state["current_step"] = last_result["target_step_idx"]
             _save_state(task_id, state)
             step = chain_def[state["current_step"]]
-            return _build_step_result(step, chain_owner, state["current_step"], chain_step_skills, state.get("context", {}))
+            return _build_step_result(step, chain_owner, state["current_step"], chain_step_skills, state.get("context", {}), task_id=task_id)
 
         # ── Skip Threshold 检查：下一步是否应跳过 ──
         next_step_idx = step_idx + 1
@@ -1152,7 +1192,7 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
 
         _save_state(task_id, state)
         step = chain_def[state["current_step"]]
-        return _build_step_result(step, chain_owner, state["current_step"], chain_step_skills, state.get("context", {}))
+        return _build_step_result(step, chain_owner, state["current_step"], chain_step_skills, state.get("context", {}), task_id=task_id)
 
     return {"status": "ERROR", "diagnosis": f"未处理的状态: {status}"}
 
