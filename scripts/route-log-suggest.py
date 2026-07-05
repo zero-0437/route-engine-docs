@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-llm-rule-suggest.py — LLM 辅助规则生成工具
+route-log-suggest.py — 路由日志分析辅助工具
 
 根据历史路由日志（JSONL）分析误匹配案例，输出 YAML diff 格式的规则调整建议，
 供人工审核。
@@ -12,9 +12,9 @@ llm-rule-suggest.py — LLM 辅助规则生成工具
   4. 规则覆盖间隙 (语义明确但被路由到 fallback/triage)
 
 用法:
-  python scripts/llm-rule-suggest.py
-  python scripts/llm-rule-suggest.py --log /path/to/logs.jsonl
-  python scripts/llm-rule-suggest.py --log /path/to/logs.jsonl --output suggestions.yaml
+  python scripts/route-log-suggest.py
+  python scripts/route-log-suggest.py --log /path/to/logs.jsonl
+  python scripts/route-log-suggest.py --log /path/to/logs.jsonl --output suggestions.yaml
 """
 
 from __future__ import annotations
