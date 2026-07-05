@@ -603,6 +603,26 @@ def route(user_input: str) -> dict:
     route_map = load_route_map()
     normalized = _normalize(user_input)
 
+    # ── 问句跳过路由 ─────────────────────────────────
+    # 如果用户输入以问号结尾，视为提问而非任务，跳过路由
+    # 支持中文问号？和英文问号？
+    stripped = normalized.rstrip()
+    if stripped.endswith('？') or stripped.endswith('?'):
+        return {
+            "agent": "",
+            "confidence": 0.0,
+            "method": "question",
+            "details": {
+                "scores": [],
+                "matched_rules": [],
+                "fallback_reason": "问句跳过路由",
+            },
+            "auto_skills": [],
+            "manual_skills": [],
+        }
+    # ──────────────────────────────────────────────
+
+
     # 检查 overrides（命中则直接返回）
     override_result = _try_override(route_map, normalized)
     if override_result is not None:
