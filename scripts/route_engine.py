@@ -84,6 +84,7 @@ def _index_chain_keywords(
                 "steps": chain_data.get("steps", []),
                 "chain_step_skills": chain_data.get("chain_step_skills", {}),
                 "report_only": chain_data.get("report_only", False),
+                "mode": chain_data.get("mode", "stepwise"),
             })
 
 
@@ -532,6 +533,7 @@ def _try_chain_keyword(route_map: dict, normalized: str) -> dict | None:
         "chain": matched_info["steps"],
         "chain_step_skills": matched_info["chain_step_skills"],
         "report_only": matched_info.get("report_only", False),
+        "mode": matched_info.get("mode", "stepwise"),
     }
 
 
