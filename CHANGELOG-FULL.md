@@ -62,7 +62,7 @@ docs/
 
 ## 二、本轮修改/新增文件清单
 
-### 2.1 新建文件
+### 2.1 修改文件
 
 | 文件路径 | 行数 | 说明 |
 |----------|------|------|
@@ -74,7 +74,7 @@ docs/
 | `/opt/data/repos/hermes-zero-token-router/plugins/route-router/router.py` | 79 | 路由插件实现 |
 | `/opt/data/repos/hermes-zero-token-router/docs/ROUTE-ENGINE-CHANGELOG.md` | 125 | 脱敏版历史文档归档 |
 
-### 2.2 修改文件
+**变更摘要**：核心重构，涉及路由处理流程、委派纪律、chain 编排规范、兜底机制的全面更新。
 
 | 文件路径 | 原行数 | 新行数 | 变更说明 |
 |----------|--------|--------|----------|
@@ -139,14 +139,16 @@ if ('？' in normalized or '?' in normalized
 
 ### 2.6 Top 4 Agent 规则瘦身明细
 
-| Agent | 原规则数 | 现规则数 | 减少 | 降幅 |
-|-------|---------|---------|------|------|
-| programmer | 41 | 17 | -24 | -59% |
-| error-analyst | 31 | 15 | -16 | -52% |
-| ui-designer | 27 | 12 | -15 | -56% |
-| reality-checker | 25 | 11 | -14 | -56% |
-| **合计（Top 4）** | **124** | **55** | **-69** | **-56%** |
-| **全量** | **285** | **216** | **-69** | **-24%** |
+| 文件 | 行数 | 状态 |
+|------|------|------|
+| `scripts/route_engine.py` | 699 | ✅ 不变（本周期无修改） |
+| `scripts/chain_executor.py` | 1285 | ✅ 不变（本周期无修改） |
+| `scripts/chain_config.py` | 47 | ✅ 不变 |
+| `scripts/route_logger.py` | 84 | ✅ 不变 |
+| `route-map/index.yaml` | ~102 | ✅ 修改（+1 chain_ref） |
+| `route-map/chains/*.yaml (9 个)` | — | ✅ 1 个增强（debugger-chain），8 个不变 |
+| `route-map/routes/*.yaml (16 个)` | — | ✅ 1 个修改（error-analyst +修bug关键词） |
+| `tests/ (2 个文件, 212 测试)` | — | ✅ 全部通过 |
 
 ---
 
