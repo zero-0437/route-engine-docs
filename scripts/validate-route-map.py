@@ -2,12 +2,77 @@
 """validate-route-map.py — route-map 目录结构验证器（12 维审计）
 与 validate-skill-map.py 对齐：退出码 0=OK, 1=WARN, 2=ERR
 """
-import json, os, re, sys, yaml
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from collections import defaultdict
+
+import yaml
 
 ROUTE_MAP_DIR = os.path.join(os.path.dirname(__file__), "..", "route-map")
 SKILL_MAP = os.path.join(os.path.dirname(__file__), "..", "skill-map.yaml")
 INDEX_FILE = os.path.join(ROUTE_MAP_DIR, "index.yaml")
 ROUTES_DIR = os.path.join(ROUTE_MAP_DIR, "routes")
+
+# ── 近义词检测辅助函数（与 analyze-route-log.py 共享逻辑） ──
+_CJK_RE = re.compile(r'[\u4e00-\u9fff]+')
+
+
+def _extract_cjk_chars(text: str) -> str:
+    return "".join(_CJK_RE.findall(text))
+
+
+def _levenshtein(s1: str, s2: str) -> int:
+    if len(s1) < len(s2):
+        s1, s2 = s2, s1
+    if not s2:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr = [i + 1]
+        for j, c2 in enumerate(s2):
+            cost = 0 if c1 == c2 else 1
+            curr.append(min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost))
+        prev = curr
+    return prev[-1]
+
+
+def _is_typo_variant(a: str, b: str) -> bool:
+    a_cjk = _extract_cjk_chars(a)
+    b_cjk = _extract_cjk_chars(b)
+    if not a_cjk or not b_cjk:
+        return False
+    if abs(len(a_cjk) - len(b_cjk)) > 1:
+        return False
+    if len(a_cjk) < 2 or len(b_cjk) < 2:
+        return _levenshtein(a_cjk, b_cjk) <= 1
+    overlap = len(set(a_cjk) & set(b_cjk))
+    min_len = min(len(set(a_cjk)), len(set(b_cjk)))
+    if min_len == 0:
+        return False
+    return _levenshtein(a_cjk, b_cjk) <= 2 and overlap / min_len >= 0.5
+
+
+def _is_near_synonym(a: str, b: str) -> bool:
+    a_cjk = _extract_cjk_chars(a)
+    b_cjk = _extract_cjk_chars(b)
+    if not a_cjk or not b_cjk:
+        return False
+    if _is_typo_variant(a, b):
+        return True
+    if a_cjk in b_cjk or b_cjk in a_cjk:
+        if a_cjk != b_cjk:
+            return True
+    set_a = set(a_cjk)
+    set_b = set(b_cjk)
+    if not set_a or not set_b:
+        return False
+    jaccard = len(set_a & set_b) / len(set_a | set_b)
+    len_ratio = min(len(a_cjk), len(b_cjk)) / max(len(a_cjk), len(b_cjk))
+    return jaccard >= 0.5 and len_ratio >= 0.5 and len(a_cjk) >= 2 and len(b_cjk) >= 2
 
 
 def err(msg, field=""):
@@ -161,6 +226,52 @@ def validate():
                     f"{fname}: rule[{i}] 与 rule[{seen[key]}] 重复 (type={key[0]}, pattern={key[1]})",
                     fname))
             seen[key] = i
+
+    # 13. 规则冗余度检查（同 weight + 同 skills + 近义词）
+    _redundant_pairs = []
+    for fname, data in route_files.items():
+        if fname == "shared.yaml":
+            continue
+        rules = data.get("rules", [])
+        # 按 (weight, skills_tuple) 分组
+        groups = {}
+        for i, rule in enumerate(rules):
+            w = rule.get("weight", 0)
+            sk = tuple(sorted(rule.get("skills", []) or []))
+            key = (w, sk)
+            groups.setdefault(key, []).append((i, rule))
+        for key, group in groups.items():
+            if len(group) < 2:
+                continue
+            for a_idx, a_rule in group:
+                for b_idx, b_rule in group:
+                    if a_idx >= b_idx:
+                        continue
+                    pa = a_rule.get("pattern", "")
+                    pb = b_rule.get("pattern", "")
+                    if pa == pb:
+                        continue
+                    # 判断是否近义词
+                    if _is_near_synonym(pa, pb):
+                        _redundant_pairs.append((fname, a_idx, b_idx, pa, pb, key[0], list(key[1])))
+
+    if _redundant_pairs:
+        redund_count = len(_redundant_pairs)
+        total_rule_pairs = sum(
+            len(data.get("rules", [])) * (len(data.get("rules", [])) - 1) // 2
+            for fname, data in route_files.items()
+            if fname != "shared.yaml"
+        )
+        ratio = redund_count / max(total_rule_pairs, 1) * 100
+        warnings.append(warn(
+            f"规则冗余度检查: 发现 {redund_count} 对冗余规则（同weight+同skills+近义词），"
+            f"占规则对总数 {total_rule_pairs} 的 {ratio:.1f}%",
+            "redundancy"))
+        for fname, a_idx, b_idx, pa, pb, w, skills in _redundant_pairs:
+            warnings.append(warn(
+                f"  {fname}: rule[{a_idx}] (\"{pa}\" weight:{w}) ↔ "
+                f"rule[{b_idx}] (\"{pb}\" weight:{w}) 同skills={skills}",
+                fname))
 
     # 判定状态
     if errors:

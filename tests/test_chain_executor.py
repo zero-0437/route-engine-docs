@@ -41,6 +41,8 @@ from scripts.chain_executor import (
     _state_path,
     _load_state,
     _save_state,
+    _save_checkpoint,
+    _try_recover_from_checkpoint,
     _build_step_result,
     _build_chain_done_result,
     _handle_blocked,
@@ -533,13 +535,13 @@ class TestStatePersistence:
         assert loaded["context"]["key"] == "val"
 
     def test_corrupted_state(self):
-        """损坏的 JSON → RuntimeError。"""
+        """损坏的 JSON → 返回 None（触发恢复）。"""
         path = _state_path("T-corrupt")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write("{invalid json!!!")
-        with pytest.raises(RuntimeError, match="损坏"):
-            _load_state("T-corrupt")
+        result = _load_state("T-corrupt")
+        assert result is None  # 不再抛 RuntimeError，而是返回 None 让调用方重新 init
 
     def test_state_advance_persists(self, sample_chain_def, sample_skills):
         """advance 后 state 应反映新 current_step。"""
@@ -551,20 +553,126 @@ class TestStatePersistence:
         assert state["current_step"] == 1
 
 
+# ── Checkpoint 恢复 ─────────────────────────────────────
+
+
+class TestCheckpointRecovery:
+    def test_checkpoint_recovery_basic(self):
+        """正常 checkpoint 恢复后 state 能正确重建。"""
+        task_id = "T-ckpt-basic"
+        ckpt = {
+            "step_idx": 2,
+            "completed_outputs": "/tmp/step2.diff",
+            "timestamp": "2025-01-01T00:00:00+00:00",
+            "spec_retry": 0,
+            "quality_retry": 0,
+            "concerns": [],
+            "total_iterations": 3,
+            "context_diff_path": "/tmp/step2.diff",
+            "context_last_output": "/tmp/step2.diff",
+        }
+        _save_checkpoint(task_id, ckpt)
+
+        state = _try_recover_from_checkpoint(task_id)
+        assert state is not None
+        assert state["current_step"] == 2
+        assert state["context"]["completed_outputs"] == "/tmp/step2.diff"
+        assert state["context"].get("diff_path") == "/tmp/step2.diff"
+        assert state["context"].get("last_output") == "/tmp/step2.diff"
+        assert state["last_checkpoint"] == ckpt
+
+    def test_checkpoint_recovery_retry_fields(self):
+        """checkpoint 恢复后 spec_retry/quality_retry 保持原值。"""
+        task_id = "T-ckpt-retry"
+        ckpt = {
+            "step_idx": 1,
+            "completed_outputs": "",
+            "timestamp": "2025-01-01T00:00:00+00:00",
+            "spec_retry": 2,
+            "quality_retry": 1,
+            "concerns": ["性能问题", "命名不规范"],
+            "total_iterations": 5,
+            "context_diff_path": "",
+            "context_last_output": "",
+        }
+        _save_checkpoint(task_id, ckpt)
+
+        state = _try_recover_from_checkpoint(task_id)
+        assert state is not None
+        assert state["spec_retry"] == 2
+        assert state["quality_retry"] == 1
+        assert state["concerns"] == ["性能问题", "命名不规范"]
+        assert state["total_iterations"] == 5
+
+    def test_checkpoint_recovery_corrupted(self):
+        """损坏的 checkpoint 返回 None。"""
+        task_id = "T-ckpt-corrupt"
+        ckpt_dir = os.path.join(
+            __import__("scripts.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
+            task_id,
+        )
+        os.makedirs(ckpt_dir, exist_ok=True)
+        with open(os.path.join(ckpt_dir, "chain-checkpoint.json"), "w") as f:
+            f.write("{invalid json!!!}")
+
+        result = _try_recover_from_checkpoint(task_id)
+        assert result is None
+
+    def test_checkpoint_recovery_missing_step_idx(self):
+        """缺少 step_idx 的 checkpoint 返回 None。"""
+        task_id = "T-ckpt-no-step"
+        ckpt_dir = os.path.join(
+            __import__("scripts.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
+            task_id,
+        )
+        os.makedirs(ckpt_dir, exist_ok=True)
+        # 写入一个合法 JSON 但缺少 step_idx 的 checkpoint
+        ckpt_path = os.path.join(ckpt_dir, "chain-checkpoint.json")
+        with open(ckpt_path, "w") as f:
+            json.dump({
+                "completed_outputs": "",
+                "timestamp": "2025-01-01T00:00:00+00:00",
+            }, f)
+
+        result = _try_recover_from_checkpoint(task_id)
+        assert result is None
+
+    def test_checkpoint_recovery_defaults(self):
+        """缺少可选字段时使用默认值而非硬编码 0。"""
+        task_id = "T-ckpt-defaults"
+        ckpt = {
+            "step_idx": 0,
+            "completed_outputs": "",
+            "timestamp": "2025-01-01T00:00:00+00:00",
+            # 故意不传 spec_retry/quality_retry/concerns/total_iterations
+        }
+        _save_checkpoint(task_id, ckpt)
+
+        state = _try_recover_from_checkpoint(task_id)
+        assert state is not None
+        assert state["spec_retry"] == 0   # 默认值
+        assert state["quality_retry"] == 0
+        assert state["concerns"] == []
+        assert state["total_iterations"] == 0
+        # context 不包含 diff_path/last_output
+        assert "diff_path" not in state["context"]
+        assert "last_output" not in state["context"]
+
+
 # ── 边界条件 ─────────────────────────────────────────
 
 
 class TestEdgeCases:
     def test_missing_current_step_in_state(self, sample_chain_def, sample_skills):
-        """state 缺少 current_step → ERROR。"""
-        _save_state("T-no-step", {"spec_retry": 0})
+        """state 缺少 current_step → 返回 ERROR 并提示 state 损坏。"""
+        _save_state("T-no-step", {"spec_retry": 0, "total_iterations": 0, "chain_started_at": None, "last_checkpoint": None})
         result = advance(
             "T-no-step", sample_chain_def, sample_skills,
             {"agent": "programmer", "status": "DONE"},
             chain_owner="error-analyst",
         )
         assert result["status"] == "ERROR"
-        assert "缺少 current_step" in result["diagnosis"]
+        assert "完全损坏" in result["diagnosis"]
 
     def test_step_idx_out_of_range(self, sample_chain_def, sample_skills):
         """state.current_step 超出 chain_def 长度 → ERROR。"""

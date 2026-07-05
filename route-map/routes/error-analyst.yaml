@@ -4,35 +4,9 @@ agent: error-analyst
 priority: 3
 condition: 故障诊断/安全审查/spec 合规评审
 rules:
-  # ── 错误/诊断/根因 → diagnosing-bugs ──
-  - type: phrase
-    pattern: 错误
-    weight: 0.8
-    skills: [diagnosing-bugs]
-  - type: phrase
-    pattern: 故障
-    weight: 0.8
-    skills: [diagnosing-bugs]
-    fuzzy: true
-  - type: phrase
-    pattern: 异常
-    weight: 0.8
-    skills: [diagnosing-bugs]
-  - type: phrase
-    pattern: 崩溃
-    weight: 0.8
-    skills: [diagnosing-bugs]
-  - type: phrase
-    pattern: 内存泄漏
-    weight: 0.8
-    skills: [diagnosing-bugs]
-    fuzzy: true
-  - type: phrase
-    pattern: 死锁
-    weight: 0.8
-    skills: [diagnosing-bugs]
-  - type: phrase
-    pattern: 诊断
+  # ── 错误/故障/崩溃/死锁/内存泄漏/诊断 → diagnosing-bugs ──
+  - type: regex
+    pattern: (错误|故障|异常|崩溃|内存泄漏|死锁|诊断)
     weight: 0.8
     skills: [diagnosing-bugs]
   - type: phrase
@@ -59,38 +33,10 @@ rules:
     weight: 0.8
     skills: [engineering-security-engineer, code-review]
     fuzzy: true
-  - type: phrase
-    pattern: 审核
-    weight: 0.8
-    skills: [engineering-security-engineer, code-review]
-  - type: phrase
-    pattern: 评审
-    weight: 0.8
-    skills: [engineering-security-engineer, code-review]
-    fuzzy: true
-  - type: phrase
-    pattern: 审计
-    weight: 0.8
-    skills: [engineering-security-engineer, code-review]
-    fuzzy: true
-  - type: phrase
-    pattern: 安全
+  - type: regex
+    pattern: (安全|漏洞|风险)
     weight: 0.8
     skills: [engineering-security-engineer]
-  - type: phrase
-    pattern: 漏洞
-    weight: 0.8
-    skills: [engineering-security-engineer]
-    fuzzy: true
-  - type: phrase
-    pattern: 风险
-    weight: 0.8
-    skills: [engineering-security-engineer]
-  - type: phrase
-    pattern: 审查代码
-    weight: 1.0
-    skills: [engineering-security-engineer, code-review]
-    fuzzy: true
   - type: phrase
     pattern: 代码审查
     weight: 1.0
@@ -102,16 +48,10 @@ rules:
     skills: [engineering-security-engineer]
 
   # ── 复盘/事故分析 → postmortem-analyst ──────────────────
-  - type: phrase
-    pattern: 复盘
+  - type: regex
+    pattern: (复盘|事故分析)
     weight: 0.9
     skills: [postmortem-analyst]
-    fuzzy: true
-  - type: phrase
-    pattern: 事故分析
-    weight: 0.9
-    skills: [postmortem-analyst]
-    fuzzy: true
 
   # ── 误匹配防护——负权重，无技能 ────────────────────────
   # ── Bug 报告→debugger-chain（diagnosing-bugs 6 阶段） ──
@@ -125,20 +65,8 @@ rules:
     pattern: 双评审
     weight: -1.0
     skills: []
-  - type: phrase
-    pattern: 修复
-    weight: -0.3
-    skills: []
-  - type: phrase
-    pattern: 修改
-    weight: -0.3
-    skills: []
-  - type: phrase
-    pattern: 写
-    weight: -0.3
-    skills: []
-  - type: phrase
-    pattern: 实现
+  - type: regex
+    pattern: (修复|修改)
     weight: -0.3
     skills: []
 

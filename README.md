@@ -58,7 +58,7 @@ Five step types: serial, parallel, batch, interactive, loop.
 | Repo | Visibility | Content |
 |------|-----------|---------|
 | zero-0437/hermes-zero-token-router | Private | Full source + production route-map |
-| zero-0437/route-engine-docs | Public | Docs + sanitized source + examples |
+| zero-0437/route-engine | Public | Docs + sanitized source + examples |
 
 ---
 *Built for Hermes Agent - Route Smart, Execute Continuously*
