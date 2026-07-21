@@ -25,7 +25,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from scripts.chain_executor import (
+from src.chain_executor import (
     MAX_RETRY,
     STEP_TYPE_SERIAL,
     STEP_TYPE_PARALLEL,
@@ -60,7 +60,7 @@ from scripts.chain_executor import (
 @pytest.fixture(autouse=True)
 def patch_state_dir(tmp_path):
     """将 STATE_DIR 指向临时目录，避免污染真实 .shared 目录。"""
-    import scripts.chain_executor as ce
+    import src.chain_executor as ce
 
     original = ce.STATE_DIR
     ce.STATE_DIR = str(tmp_path / ".shared")
@@ -459,7 +459,7 @@ class TestRunVerification:
         assert result["status"] == STATUS_VERIFICATION_FAILED
         assert not result["results"][0]["passed"]
 
-    @patch("scripts.chain_executor.subprocess.run")
+    @patch("src.chain_executor.subprocess.run")
     def test_simple_command_verified(self, mock_run):
         """简单命令 → shell=False, returncode=0 → VERIFIED。"""
         mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
@@ -472,7 +472,7 @@ class TestRunVerification:
         assert mock_run.call_args[0][0] == ["git", "status"]
         assert mock_run.call_args[1]["shell"] is False
 
-    @patch("scripts.chain_executor.subprocess.run")
+    @patch("src.chain_executor.subprocess.run")
     def test_shell_command_whitelist(self, mock_run):
         """管道命令（git | head）→ shell=True + 白名单校验通过。"""
         mock_run.return_value = MagicMock(returncode=0, stdout="M file.py", stderr="")
@@ -484,7 +484,7 @@ class TestRunVerification:
         assert result["status"] == STATUS_VERIFIED
         assert mock_run.call_args[1]["shell"] is True
 
-    @patch("scripts.chain_executor.subprocess.run")
+    @patch("src.chain_executor.subprocess.run")
     def test_shell_command_blocked(self, mock_run):
         """管道含不在白名单的命令 → VERIFICATION_FAILED。"""
         step = {"completion_contract": [
@@ -496,7 +496,7 @@ class TestRunVerification:
         assert "不在白名单" in result["results"][0]["error"]
         mock_run.assert_not_called()
 
-    @patch("scripts.chain_executor.subprocess.run")
+    @patch("src.chain_executor.subprocess.run")
     def test_timeout(self, mock_run):
         """超时 → TimeoutExpired → VERIFICATION_FAILED。"""
         import subprocess
@@ -608,7 +608,7 @@ class TestCheckpointRecovery:
         """损坏的 checkpoint 返回 None。"""
         task_id = "T-ckpt-corrupt"
         ckpt_dir = os.path.join(
-            __import__("scripts.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
+            __import__("src.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
             task_id,
         )
         os.makedirs(ckpt_dir, exist_ok=True)
@@ -622,7 +622,7 @@ class TestCheckpointRecovery:
         """缺少 step_idx 的 checkpoint 返回 None。"""
         task_id = "T-ckpt-no-step"
         ckpt_dir = os.path.join(
-            __import__("scripts.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
+            __import__("src.chain_executor", fromlist=["STATE_DIR"]).STATE_DIR,
             task_id,
         )
         os.makedirs(ckpt_dir, exist_ok=True)
@@ -734,13 +734,13 @@ class TestEdgeCases:
 
     def test_sanitize_task_id_rejected(self):
         """非法 task_id → ValueError。"""
-        from scripts.chain_executor import _sanitize_task_id
+        from src.chain_executor import _sanitize_task_id
         with pytest.raises(ValueError, match="非法"):
             _sanitize_task_id("../../etc/passwd")
 
     def test_sanitize_task_id_accepted(self):
         """合法 task_id → 正常通过。"""
-        from scripts.chain_executor import _sanitize_task_id
+        from src.chain_executor import _sanitize_task_id
         assert _sanitize_task_id("T-001.abc_def") == "T-001.abc_def"
 
 

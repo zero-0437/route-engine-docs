@@ -628,6 +628,15 @@ def route(user_input: str) -> dict:
         }
     # ──────────────────────────────────────────────
 
+    # ── 激活的 chain 检测 + 确认词路由 ─────────────────────
+    # 扫描 .shared/ 目录下的 chain checkpoint 文件
+    chain_state = _detect_active_chain()
+    if chain_state is not None:
+        chain_result = _route_chain_input(normalized, chain_state)
+        if chain_result is not None:
+            return chain_result
+    # ──────────────────────────────────────────────
+
     # 检查 overrides（命中则直接返回）
     override_result = _try_override(route_map, normalized)
     if override_result is not None:
@@ -640,6 +649,79 @@ def route(user_input: str) -> dict:
 
     # 评估 + 决策
     return _evaluate_and_decide(user_input, normalized, route_map)
+
+
+# ── Chain 激活检测 + 确认词路由 ──────────────────────────
+_CHAIN_STATE_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 os.pardir, ".shared")
+)
+
+
+def _detect_active_chain() -> dict | None:
+    """扫描 .shared/ 目录，检测是否有激活的 chain checkpoint。"""
+    if not os.path.isdir(_CHAIN_STATE_DIR):
+        return None
+    for fname in os.listdir(_CHAIN_STATE_DIR):
+        if not fname.startswith("chain-") or not fname.endswith(".json"):
+            continue
+        fpath = os.path.join(_CHAIN_STATE_DIR, fname)
+        try:
+            with open(fpath, "r") as f:
+                state = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        status = state.get("status", "")
+        if status not in ("KILLED", "DONE"):
+            return state
+    return None
+
+
+def _route_chain_input(normalized: str, chain_state: dict) -> dict | None:
+    """根据 chain 激活状态和用户输入，返回路由决策或 None。"""
+    chain_name = chain_state.get("chain_name", "unknown")
+    task_id = chain_state.get("task_id", "")
+
+    if "继续" in normalized or "确认" in normalized:
+        return {
+            "agent": "chain_advance", "confidence": 1.0,
+            "method": "chain_active", "chain_action": "advance",
+            "details": {"matched_rules": [f"chain_active:{chain_name}"],
+                        "chain_task_id": task_id,
+                        "scores": [], "fallback_reason": ""},
+            "auto_skills": [], "manual_skills": [],
+        }
+    if "暂停" in normalized or "等一下" in normalized:
+        return {
+            "agent": "chain_advance", "confidence": 1.0,
+            "method": "chain_active", "chain_action": "pause",
+            "details": {"matched_rules": [f"chain_pause:{chain_name}"],
+                        "chain_task_id": task_id,
+                        "scores": [], "fallback_reason": ""},
+            "auto_skills": [], "manual_skills": [],
+        }
+    if "跳过" in normalized:
+        return {
+            "agent": "chain_advance", "confidence": 1.0,
+            "method": "chain_active", "chain_action": "skip",
+            "details": {"matched_rules": [f"chain_skip:{chain_name}"],
+                        "chain_task_id": task_id,
+                        "scores": [], "fallback_reason": ""},
+            "auto_skills": [], "manual_skills": [],
+        }
+    if "恢复" in normalized or "继续刚才" in normalized:
+        return {
+            "agent": "chain_advance", "confidence": 1.0,
+            "method": "chain_active", "chain_action": "resume",
+            "details": {"matched_rules": [f"chain_resume:{chain_name}"],
+                        "chain_task_id": task_id,
+                        "scores": [], "fallback_reason": ""},
+            "auto_skills": [], "manual_skills": [],
+        }
+    return None
+
+
+# ────────────────────────────────────────────────────────
 
 
 # ── 日志记录已剥离到 route_logger.py ──
