@@ -1,0 +1,151 @@
+# route-map/routes/agnes-ai-media.yaml
+# Agnes AI 媒体生成 — 文生图、图生图、文生视频、图生视频、关键帧动画
+# 路由到 pm-agent（调度者），由其委派到主 Agent 加载 agnes-ai-media skill
+agent: agnes-ai-media
+priority: 11
+condition: 文生图/图生图/文生视频/图生视频/关键帧动画/AI媒体生成
+rules:
+  # ── 文生图 ─────────────────────────────────────────
+  - type: phrase
+    pattern: 文生图
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 生成图
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 生图
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 画一张
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 图片
+    weight: 0.7
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 绘制
+    weight: 0.7
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+
+  # ── 图生图 ─────────────────────────────────────────
+  - type: phrase
+    pattern: 图生图
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 改图
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 编辑图片
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 把这张图
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+
+  # ── 文生视频 ─────────────────────────────────────────
+  - type: phrase
+    pattern: 文生视频
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 生成视频
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 做视频
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 视频
+    weight: 0.7
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+
+  # ── 图生视频 ─────────────────────────────────────────
+  - type: phrase
+    pattern: 图生视频
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 做成视频
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 图片.*视频
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+  - type: regex
+    pattern: (图片|照片|图)动起来
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+
+  # ── 关键帧动画 ─────────────────────────────────────────
+  - type: phrase
+    pattern: 关键帧
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+  - type: phrase
+    pattern: 动画过渡
+    weight: 0.8
+    skills:
+      - agnes-ai-media
+    fuzzy: true
+
+  # ── 英文关键词 ─────────────────────────────────────────
+  - type: regex
+    pattern: \b(text-to-image|image-to-image|t2i|i2i|txt2img|img2img)\b
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+  - type: regex
+    pattern: \b(text-to-video|image-to-video|t2v|i2v|txt2vid)\b
+    weight: 0.9
+    skills:
+      - agnes-ai-media
+  - type: regex
+    pattern: \b(generat(e|ing|ion).*(image|picture|photo|video))\b
+    weight: 0.7
+    skills:
+      - agnes-ai-media

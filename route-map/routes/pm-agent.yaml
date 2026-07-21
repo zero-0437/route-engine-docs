@@ -1,7 +1,8 @@
 agent: pm-agent
 priority: 1
-condition: 纯协调类（多Agent编排/跨域冲突/批量任务拆解）
+condition: 纯协调类（多Agent编排/跨域冲突/批量任务拆解）+ 新需求/新功能入口
 rules:
+# ── 原有：架构/协调类 ──
 - type: phrase
   pattern: 架构
   weight: 1.0
@@ -71,3 +72,97 @@ rules:
   - skill-creator
   - multi-agent-arch
   fuzzy: true
+
+# ── 新需求/新功能入口（原 spec-agent 合并） ──
+- type: phrase
+  pattern: 实现
+  weight: 0.8
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 制作
+  weight: 0.8
+  skills:
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 创建
+  weight: 0.8
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 开发
+  weight: 0.8
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 搞一个
+  weight: 0.7
+  skills:
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 写一个
+  weight: 0.7
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 加一个
+  weight: 0.7
+  skills:
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 新功能
+  weight: 0.9
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: phrase
+  pattern: 新项目
+  weight: 0.9
+  skills:
+  - product-manager
+  - plan
+  fuzzy: true
+- type: regex
+  pattern: \\b(new project|new feature|implement|create|build|make)\\b
+  weight: 0.7
+  skills:
+  - product-manager
+  - plan
+
+# ── 负向规则：防止 pm-agent 截胡错误/诊断类任务 ──
+- type: phrase
+  pattern: 改
+  weight: -0.5
+  skills: []
+- type: regex
+  pattern: (失败|错误|出错)
+  weight: -1.0
+  skills: []
+- type: phrase
+  pattern: 诊断
+  weight: -0.5
+  skills: []
+- type: phrase
+  pattern: 复盘
+  weight: -0.5
+  skills: []
+- type: phrase
+  pattern: 排查
+  weight: -0.5
+  skills: []
+- type: phrase
+  pattern: 分析
+  weight: -0.3
+  skills: []

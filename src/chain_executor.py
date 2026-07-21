@@ -3,19 +3,19 @@
 chain_executor.py — chain 编排引擎（状态机）
 
 调用方式：
-  python3 scripts/chain_executor.py advance \\
+  python3 src/chain_executor.py advance \\
     --task_id T-001 \\
     --chain_def '[{"agent":"programmer","goal":"..."},{"agent":"error-analyst","goal":"..."}]' \\
     --chain_step_skills '{"programmer_0":["test-driven-development"]}' \\
     --last_result '{"agent":"programmer","status":"DONE","output_path":"..."}'
 
-  python3 scripts/chain_executor.py start \\
+  python3 src/chain_executor.py start \\
     --task_id T-001 \\
     --chain_def '[{"agent":"programmer","goal":"TDD 实现 + self-review"},...]' \\
     --chain_step_skills '{"programmer@0":[...]}' \\
     --chain_owner programmer
 
-  python3 scripts/chain_executor.py run \\
+  python3 src/chain_executor.py run \\
     --task_id T-001 \\
     --chain_agent programmer \\
     --last_result '{"status":"init"}'
@@ -38,16 +38,18 @@ except ImportError:
     yaml = None
 
 import sys as _sys
-_SCRIPTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "scripts"))
-if _SCRIPTS_DIR not in _sys.path:
-    _sys.path.insert(0, _SCRIPTS_DIR)
-del _SCRIPTS_DIR, _sys
-from chain_config import SCRIPT_DIR, load_yaml_safe, load_chain
+_SRC_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "src"))
+if _SRC_DIR not in _sys.path:
+    _sys.path.insert(0, _SRC_DIR)
+del _SRC_DIR, _sys
+from chain_config import SCRIPT_DIR, load_yaml_safe, load_chain, load_index
 
 # ── 路径计算 ────────────────────────────────────
 
 # ── 默认配置 ────────────────────────────────────
 MAX_RETRY = 3
+MAX_TOTAL_ITERATIONS = 100    # 全局迭代次数上限
+CHAIN_TIMEOUT = 3600           # 链执行 wall-clock 超时（秒）
 STATE_DIR = "/opt/data/.shared"
 INDEX_YAML_PATH = os.path.join(SCRIPT_DIR, "..", "route-map", "index.yaml")
 
@@ -310,19 +312,69 @@ def _state_path(task_id: str) -> str:
     return os.path.join(STATE_DIR, task_id, "chain-state.json")
 
 
-def _load_state(task_id: str) -> dict:
-    """从磁盘加载指定 task 的状态数据。
+def _try_recover_from_checkpoint(task_id: str) -> dict | None:
+    """尝试从最近的有效 checkpoint 重建 state。
 
-    如果状态文件不存在，返回默认初始状态（current_step=0, retry 计数器归零, concerns=[]）。
+    Checkpoint 存储在 state 同一目录下的 chain-checkpoint.json 文件中。
+    如果 checkpoint 存在且完整，重建包含 current_step、completed_outputs 等字段的 state。
 
     参数:
         task_id: 任务标识符
 
     返回:
-        状态字典，包含 current_step、spec_retry、quality_retry、concerns、context 等字段
+        重建的状态字典，如果 checkpoint 不存在或损坏则返回 None
+    """
+    ckpt_path = os.path.join(STATE_DIR, task_id, "chain-checkpoint.json")
+    if not os.path.exists(ckpt_path):
+        return None
+    try:
+        with open(ckpt_path) as f:
+            ckpt = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[RECOVERY] checkpoint JSON 解析失败: {ckpt_path} — {e}", file=sys.stderr)
+        return None
 
-    异常:
-        RuntimeError: 状态文件损坏（JSON 解析失败）或不可读时抛出
+    step_idx = ckpt.get("step_idx")
+    if step_idx is None:
+        print(f"[RECOVERY] checkpoint 缺少 step_idx 字段 (task_id={task_id})", file=sys.stderr)
+        return None
+
+    completed_outputs = ckpt.get("completed_outputs", [])
+    print(f"[RECOVERY] 从 checkpoint 重建 state: task_id={task_id}, step={step_idx}", file=sys.stderr)
+
+    # 重建 context，保留 checkpoint 中的 diff_path 和 last_output（如有）
+    context = {"completed_outputs": completed_outputs}
+    if ckpt.get("context_diff_path"):
+        context["diff_path"] = ckpt["context_diff_path"]
+    if ckpt.get("context_last_output"):
+        context["last_output"] = ckpt["context_last_output"]
+
+    return {
+        "current_step": step_idx,
+        "spec_retry": ckpt.get("spec_retry", 0),
+        "quality_retry": ckpt.get("quality_retry", 0),
+        "concerns": ckpt.get("concerns", []),
+        "context": context,
+        "total_iterations": ckpt.get("total_iterations", 0),
+        "chain_started_at": None,
+        "last_checkpoint": ckpt,
+    }
+
+
+def _load_state(task_id: str) -> dict | None:
+    """从磁盘加载指定 task 的状态数据。
+
+    如果状态文件不存在，返回默认初始状态（current_step=0, retry 计数器归零, concerns=[]）。
+
+    如果状态文件损坏或关键字段缺失，尝试从 checkpoint 恢复。
+    如果 checkpoint 也存在但损坏，返回 None 让调用方重新 init。
+
+    参数:
+        task_id: 任务标识符
+
+    返回:
+        状态字典，包含 current_step、spec_retry、quality_retry、concerns、context 等字段。
+        返回 None 表示状态完全损坏且无法恢复，调用方应重新 init。
     """
     path = _state_path(task_id)
     if not os.path.exists(path):
@@ -332,15 +384,32 @@ def _load_state(task_id: str) -> dict:
             "quality_retry": 0,
             "concerns": [],
             "context": {},
+            "total_iterations": 0,
+            "chain_started_at": None,
+            "last_checkpoint": None,
         }
+    state = None
     try:
         with open(path) as f:
-            return json.load(f)
+            state = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        raise RuntimeError(
-            f"state 文件损坏或不可读: {path} — {e}。"
-            f"如需恢复，请检查/删除此文件后重试。"
-        )
+        print(f"[RECOVERY] state JSON 解析失败: {path} — {e}", file=sys.stderr)
+        state = None
+
+    # 检查关键字段是否完整
+    if state is not None and "current_step" not in state:
+        print(f"[RECOVERY] state 缺少关键字段 current_step (task_id={task_id})", file=sys.stderr)
+        state = None
+
+    if state is not None:
+        return state
+
+    # ── 尝试从 checkpoint 恢复 ──
+    state = _try_recover_from_checkpoint(task_id)
+    if state is not None:
+        return state
+
+    return None
 
 
 def _save_state(task_id: str, state: dict):
@@ -364,6 +433,27 @@ def _save_state(task_id: str, state: dict):
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
+
+
+def _save_checkpoint(task_id: str, checkpoint: dict):
+    """将 checkpoint 原子化写入磁盘。
+
+    Checkpoint 存储在 state 同一目录下的 chain-checkpoint.json 文件中。
+    使用临时文件 + os.replace 确保写入原子性。
+
+    参数:
+        task_id: 任务标识符
+        checkpoint: 要持久化的 checkpoint 字典（含 step_idx, completed_outputs, timestamp）
+    """
+    ckpt_dir = os.path.join(STATE_DIR, task_id)
+    ckpt_path = os.path.join(ckpt_dir, "chain-checkpoint.json")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    tmp = ckpt_path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(checkpoint, f, ensure_ascii=False, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, ckpt_path)
 
 
 def _build_step_result(step: dict, chain_owner: str, step_idx: int,
@@ -653,7 +743,8 @@ def _handle_blocked(step_idx: int, agent: str, step_goal: str,
 
 def _handle_needs_fix(task_id: str, state: dict, step_idx: int,
                       agent: str, step_goal: str, step_type: str,
-                      last_result: dict) -> dict:
+                      last_result: dict,
+                      advance_fn=None, fix_agent=None) -> dict:
     """处理 NEEDS_FIX 状态：根据 review 类型增加 retry 计数并返回 RETRY 指令。
 
     支持 spec-review 和 quality-review 两种 retry 类型。
@@ -684,10 +775,11 @@ def _handle_needs_fix(task_id: str, state: dict, step_idx: int,
                 "spec_retry_count": retry,
             }
         _save_state(task_id, state)
+        fix = fix_agent or agent
         return {
             "status": "RETRY",
             "next": {
-                "agent": "programmer",
+                "agent": fix,
                 "goal": f"fix: 根据 spec review 修复 ({retry}/{MAX_RETRY})",
                 "skills": ["test-driven-development", "requesting-code-review"],
             },
@@ -712,10 +804,11 @@ def _handle_needs_fix(task_id: str, state: dict, step_idx: int,
                 "quality_retry_count": retry,
             }
         _save_state(task_id, state)
+        fix = fix_agent or agent
         return {
             "status": "RETRY",
             "next": {
-                "agent": "programmer",
+                "agent": fix,
                 "goal": f"fix: 根据 quality review 修复 ({retry}/{MAX_RETRY})",
                 "skills": ["test-driven-development", "requesting-code-review"],
             },
@@ -1048,12 +1141,20 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
             state = _load_state(task_id)
         except RuntimeError as e:
             return {"status": "ERROR", "diagnosis": str(e)}
+        if state is None:
+            return {"status": "ERROR", "diagnosis": f"state 文件完全损坏且无法从 checkpoint 恢复 (task_id={task_id})"}
         # 重置状态（避免跨 session 污染）
         state.update({
             "current_step": 0, "spec_retry": 0, "quality_retry": 0,
             "concerns": [], "context": {}, "chain_owner": chain_owner,
             "report_only": report_only,
+            "total_iterations": 0, "chain_started_at": None,
+            "last_checkpoint": None,
         })
+        import time as _time
+        state["total_iterations"] = state.get("total_iterations", 0) + 1
+        if state.get("chain_started_at") is None:
+            state["chain_started_at"] = _time.time()
         _save_state(task_id, state)
 
         step = chain_def[0]
@@ -1063,6 +1164,45 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
         state = _load_state(task_id)
     except RuntimeError as e:
         return {"status": "ERROR", "diagnosis": str(e)}
+    if state is None:
+        return {"status": "ERROR", "diagnosis": f"state 文件完全损坏且无法从 checkpoint 恢复 (task_id={task_id})"}
+
+    # ── PAUSED 状态检查：如果链被暂停，立即返回 PAUSED ──
+    if state.get("status") == "PAUSED":
+        return {
+            "status": "PAUSED",
+            "step_idx": state.get("current_step", 0),
+            "agent": last_result.get("agent", ""),
+            "goal": "",
+            "diagnosis": f"chain is paused — use rescue to continue (task_id={task_id})",
+        }
+
+    # ── 全局安全网：总迭代次数检查 ──
+    state["total_iterations"] = state.get("total_iterations", 0) + 1
+    if state["total_iterations"] > MAX_TOTAL_ITERATIONS:
+        _save_state(task_id, state)
+        return {
+            "status": "BLOCKED",
+            "step_idx": state.get("current_step", 0),
+            "agent": last_result.get("agent", ""),
+            "goal": "",
+            "diagnosis": f"total_iterations exceeded MAX_TOTAL_ITERATIONS ({MAX_TOTAL_ITERATIONS})",
+        }
+
+    # ── 全局安全网：Wall-clock 超时检查 ──
+    import time as _time
+    if state.get("chain_started_at") is None:
+        state["chain_started_at"] = _time.time()
+    elif _time.time() - state["chain_started_at"] > CHAIN_TIMEOUT:
+        _save_state(task_id, state)
+        return {
+            "status": "BLOCKED",
+            "step_idx": state.get("current_step", 0),
+            "agent": last_result.get("agent", ""),
+            "goal": "",
+            "diagnosis": f"chain wall-clock timeout exceeded CHAIN_TIMEOUT ({CHAIN_TIMEOUT}s)",
+        }
+    _save_state(task_id, state)
     # 使用 state 中存储的 chain_owner（首次调用时已保存）
     chain_owner = state.get("chain_owner", chain_owner)
     agent = last_result.get("agent", "")
@@ -1132,8 +1272,11 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
     # ── NEEDS_FIX — review 不通过 ──
     if status == "NEEDS_FIX":
         step_type = _infer_step_type(step_goal)
+        # Determine the fix agent dynamically from chain_def
+        fix_agent = chain_def[0].get("agent", agent) if chain_def and len(chain_def) > 0 else agent
         return _handle_needs_fix(task_id, state, step_idx, agent,
-                                 step_goal, step_type, last_result)
+                                 step_goal, step_type, last_result,
+                                 advance_fn=advance, fix_agent=fix_agent)
 
     # ── DONE / APPROVE — 推进或回归 ──
     if status in ("DONE", "APPROVE"):
@@ -1141,6 +1284,20 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
         if last_result.get("output_path"):
             state["context"]["diff_path"] = last_result["output_path"]
         state["context"]["last_output"] = last_result.get("output_path", "")
+
+        # ── Checkpoint：记录当前已完成步骤及关键状态 ──
+        checkpoint = {
+            "step_idx": step_idx,
+            "completed_outputs": state.get("completed_outputs", ""),
+            "spec_retry": state.get("spec_retry", 0),
+            "quality_retry": state.get("quality_retry", 0),
+            "concerns": state.get("concerns", []),
+            "total_iterations": state.get("total_iterations", 0),
+            "context_diff_path": state.get("context", {}).get("diff_path"),
+            "context_last_output": state.get("context", {}).get("last_output"),
+        }
+        state["last_checkpoint"] = checkpoint
+        _save_checkpoint(task_id, checkpoint)
 
         # 防御检查：RETRY 上下文中缺少 target_step_idx
         if last_result.get("target_step_idx") is None and state["context"].get("retry_type"):
@@ -1197,6 +1354,131 @@ def advance(task_id: str, chain_def: list, chain_step_skills: dict,
     return {"status": "ERROR", "diagnosis": f"未处理的状态: {status}"}
 
 
+def _rescue(task_id: str, step_idx: int | None = None):
+    """跳过当前阻塞的 step，直接进入下一步或指定 step。
+
+    参数:
+        task_id: 任务标识符
+        step_idx: 可选，指定跳转到哪个 step（0-based）。默认跳到下一步。
+
+    返回:
+        新的 state 字典，current_step 指向跳转后的 step。
+    """
+    try:
+        _sanitize_task_id(task_id)
+    except ValueError as e:
+        return {"status": "ERROR", "diagnosis": str(e)}
+
+    state = _load_state(task_id)
+    if state is None:
+        return {"status": "ERROR", "diagnosis": f"state 不存在或已损坏 (task_id={task_id})"}
+
+    current_step = state.get("current_step", 0)
+    target_step = (current_step + 1) if step_idx is None else step_idx
+
+    # 记录救援信息
+    rescue_record = {
+        "rescue_skip": True,
+        "rescued_at": __import__("time").time(),
+        "from_step": current_step,
+        "to_step": target_step,
+        "message": f"人工介入: rescue from step {current_step} to step {target_step}",
+    }
+    state.setdefault("rescue_log", []).append(rescue_record)
+    state["current_step"] = target_step
+    # 清除 PAUSED 状态（rescue 隐含恢复执行）
+    if state.get("status") == "PAUSED":
+        state.pop("status", None)
+
+    _save_state(task_id, state)
+    state["_rescue_action"] = rescue_record
+    return state
+
+
+def _kill(task_id: str):
+    """立即终止整个链。
+
+    设置 state 状态为 KILLED，返回所有已完成步骤的 result 和产出物。
+    不保存 checkpoint（手动终止不需要恢复）。
+
+    参数:
+        task_id: 任务标识符
+
+    返回:
+        dict: 包含 status=KILLED, completed_steps, completed_outputs
+    """
+    try:
+        _sanitize_task_id(task_id)
+    except ValueError as e:
+        return {"status": "ERROR", "diagnosis": str(e)}
+
+    state = _load_state(task_id)
+    if state is None:
+        return {"status": "ERROR", "diagnosis": f"state 不存在或已损坏 (task_id={task_id})"}
+
+    # 收集已完成步骤的结果
+    completed_steps = state.get("completed_steps", [])
+    completed_outputs = state.get("completed_outputs", [])
+
+    # 设置 KILLED 状态
+    state["status"] = "KILLED"
+    state["killed_at"] = __import__("time").time()
+    state.setdefault("rescue_log", []).append({
+        "kill": True,
+        "killed_at": __import__("time").time(),
+        "message": "人工介入: chain killed",
+    })
+
+    _save_state(task_id, state)
+
+    return {
+        "status": "KILLED",
+        "task_id": task_id,
+        "completed_steps": completed_steps,
+        "completed_outputs": completed_outputs,
+        "current_step": state.get("current_step", 0),
+        "diagnosis": "Chain manually terminated via kill action",
+    }
+
+
+def _pause(task_id: str):
+    """暂停链执行。
+
+    设置 state 状态为 PAUSED，后续 advance() 调用检测到 PAUSED 状态直接返回 Blocked。
+
+    参数:
+        task_id: 任务标识符
+
+    返回:
+        dict: 包含 status=PAUSED, current_step
+    """
+    try:
+        _sanitize_task_id(task_id)
+    except ValueError as e:
+        return {"status": "ERROR", "diagnosis": str(e)}
+
+    state = _load_state(task_id)
+    if state is None:
+        return {"status": "ERROR", "diagnosis": f"state 不存在或已损坏 (task_id={task_id})"}
+
+    state["status"] = "PAUSED"
+    state["paused_at"] = __import__("time").time()
+    state.setdefault("rescue_log", []).append({
+        "pause": True,
+        "paused_at": __import__("time").time(),
+        "message": "人工介入: chain paused",
+    })
+
+    _save_state(task_id, state)
+
+    return {
+        "status": "PAUSED",
+        "task_id": task_id,
+        "current_step": state.get("current_step", 0),
+        "diagnosis": "Chain manually paused — advance() will return Blocked until rescue or kill",
+    }
+
+
 def main():
     """CLI 入口函数。
 
@@ -1212,7 +1494,9 @@ def main():
         SystemExit(1): 参数缺失、JSON 解析失败、task_id 非法或 step_idx 越界时退出
     """
     parser = argparse.ArgumentParser(description="Chain 编排引擎")
-    parser.add_argument("action", choices=["advance", "start", "run", "verify"])
+    parser.add_argument("action",
+                        help="可用命令: advance, start, run, verify, rescue/恢复/跳过/继续/skip, "
+                             "kill/终止/结束/停止/cancel, pause/暂停/停")
     parser.add_argument("--task_id", required=True)
     parser.add_argument("--step_idx", default=None, type=int,
                         help="step 索引（verify action 必填）")
@@ -1231,6 +1515,27 @@ def main():
     parser.add_argument("--dry-run", action="store_true", default=False, dest="dry_run",
                         help="dry-run 模式：不加载/不修改状态，直接返回当前 step 的合法 status 列表")
     args = parser.parse_args()
+
+    # 中文别名映射 -> 标准 action 名
+    ACTION_ALIASES = {
+        "恢复": "rescue", "跳过": "rescue", "继续": "rescue",
+        "skip": "rescue",
+        "终止": "kill", "结束": "kill", "停止": "kill",
+        "cancel": "kill",
+        "暂停": "pause", "停": "pause",
+    }
+    STANDARD_ACTIONS = {"advance", "start", "run", "verify", "rescue", "kill", "pause"}
+
+    if args.action in ACTION_ALIASES:
+        args.action = ACTION_ALIASES[args.action]
+    elif args.action not in STANDARD_ACTIONS:
+        aliases_help = ", ".join(f"{k}(={v})" for k, v in ACTION_ALIASES.items())
+        print(json.dumps({
+            "status": "ERROR",
+            "diagnosis": f"未知 action '{args.action}'。可用命令: advance, start, run, verify, "
+                         f"rescue(恢复/跳过/继续/skip), kill(终止/结束/停止/cancel), pause(暂停/停)",
+        }, ensure_ascii=False))
+        sys.exit(1)
 
     # 在 main 入口净化 task_id
     try:
@@ -1297,6 +1602,15 @@ def main():
 
         step = chain_def[args.step_idx]
         result = run_verification(step)
+
+    elif args.action == "rescue":
+        result = _rescue(args.task_id, step_idx=args.step_idx)
+
+    elif args.action == "kill":
+        result = _kill(args.task_id)
+
+    elif args.action == "pause":
+        result = _pause(args.task_id)
 
     else:
         # advance (原有行为，保持向后兼容)

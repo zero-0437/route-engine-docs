@@ -54,7 +54,7 @@
 
 | 编号 | 切片名 | 涉及文件 | 级别 | 改动量 | 依赖关系 | 描述 |
 |------|--------|----------|------|--------|----------|------|
-| S23 | **FORCE_ROUTE_THRESHOLD 调整** | `plugins/route-router/__init__.py` (L9) | LOW | ⭐ 极小（改1个常量） | S03 必须先完成（confidence 上限正确后再调阈值） | `FORCE_ROUTE_THRESHOLD = 2.0` 与 confidence 上限 1.0 冲突。改 2.0 → 1.0 或 0.9。对应问题：arch LOW-2 |
+| S23 | **FORCE_ROUTE_THRESHOLD 调整** | `plugins/zero-token-router/router.py` | LOW | ⭐ 极小（改1个常量） | S03 必须先完成（confidence 上限正确后再调阈值） | `FORCE_ROUTE_THRESHOLD = 2.0` 与 confidence 上限 1.0 冲突。改 2.0 → 1.0 或 0.9。对应问题：arch LOW-2 |
 | S24 | **缓存策略文档化** | `scripts/route_engine.py`, `scripts/chain_executor.py` | LOW | ⭐ 极小（加注释/docstring） | 无 | 两模块缓存策略不同（内存 vs 文件），加注释说明设计意图和 TTL 机制。对应问题：arch MEDIUM-1 |
 | S25 | **timeout=30 可配置化** | `scripts/chain_executor.py` (L452) | LOW | ⭐ 极小（从 chain_def 读取或加参数） | 无 | verification timeout 硬编码 30s，改为从 step 的 `completion_contract` 读取或默认值+覆盖。对应问题：quality LOW-3 |
 | S26 | **负权重注释标准化** | `route-map/routes/*.yaml`（全部） | LOW | ⭐ 小（扫描全部15文件加注释） | 无 | 统一负权重规则的注释格式为 `# ── 误匹配防护——负权重，无技能`。对应问题：review M-4 |

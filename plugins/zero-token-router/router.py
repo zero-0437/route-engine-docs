@@ -4,7 +4,7 @@ import logging
 import shlex
 import subprocess
 
-logger = logging.getLogger("route-router")
+logger = logging.getLogger("zero-token-router")
 
 ROUTE_ENGINE_PYTHON = "/opt/hermes/.venv/bin/python3"
 ROUTE_ENGINE_SCRIPT = "/opt/data/scripts/route_engine.py"

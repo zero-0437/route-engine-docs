@@ -39,10 +39,11 @@ agents:
     file: routes/memory-agent.yaml
     priority: 9
   pm-agent:
-    condition: 纯协调类（多Agent编排/跨域冲突/批量任务拆解）
-    description: 技术架构师 + 执行调度者
+    condition: 新需求入口 + 多Agent编排/跨域冲突/批量任务拆解
+    description: 技术架构师 + 执行调度者 — 新需求先做规划，再委派执行
     file: routes/pm-agent.yaml
     priority: 3
+    chain_ref: new-project-chain
   programmer:
     condition: 编码类任务（代码/配置/治理文件/rules 修改——全部走 superpowers 全管线）
     description: 代码编写与调试 — 按 TDD 纪律交付可工作代码
@@ -70,11 +71,12 @@ agents:
     description: 前端与视觉设计 — 设计实现+创意生成
     file: routes/ui-designer.yaml
     priority: 5
-  spec-agent:
-    condition: 新项目/新功能强制入口 — 需求对齐+PRD 产出
-    description: 规格与对齐 Agent — 需求调研+领域建模+PRD 产出，只写文档不碰代码
-    file: routes/spec-agent.yaml
-    priority: 1
+# spec-agent 已合并到 pm-agent (2026-07-20)
+  agnes-ai-media:
+    condition: 文生图/图生图/文生视频/图生视频/关键帧动画/AI媒体生成
+    description: Agnes AI 媒体生成 — 文生图/图生图/文生视频/图生视频/关键帧动画
+    file: routes/agnes-ai-media.yaml
+    priority: 11
   triage:
     condition: 未确认的 bug/feature 报告，需前置核实
     description: Issue 分类 — 核实→查重→Agent Brief→转执行链
@@ -85,7 +87,7 @@ defaults:
   fallback_agent: pm-agent
   method: threshold
   min_confidence: 0.5
-last_updated: '2026-07-03T00:00:00Z'
+last_updated: '2026-07-20T00:00:00Z'
 maintainer: pm-agent
 overrides:
 - agent: pm-agent

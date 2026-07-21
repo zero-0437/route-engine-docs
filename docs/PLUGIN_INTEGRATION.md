@@ -1,4 +1,4 @@
-# 插件集成：route-router
+# 插件集成：zero-token-router
 
 > 将 core route_engine.py 嵌入 Hermes Agent 的 plugin 层，实现零 token 预路由
 
@@ -13,7 +13,7 @@
 │                                                  │
 │  ┌──────────────────────────────────────────┐    │
 │  │  pre_llm_call 钩子                        │    │
-│  │  (route-router 插件)                      │    │
+│  │  (zero-token-router 插件)                      │    │
 │  │                                           │    │
 │  │  router.run_route_engine(msg) ────────────│──────→ route_engine.py
 │  │        │                                  │    │     (缓存预热)
@@ -37,7 +37,7 @@
 ## 插件结构
 
 ```
-plugins/route-router/
+plugins/zero-token-router/
 ├── __init__.py      # pre_llm_call 钩子注册 + 上下文注入
 └── router.py        # 惰性导入 + 预热 route_engine.py
 ```

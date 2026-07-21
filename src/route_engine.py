@@ -9,6 +9,12 @@ import os
 import re
 import yaml
 
+import sys as _sys
+_SRC_DIR = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
+if _SRC_DIR not in _sys.path:
+    _sys.path.insert(0, _SRC_DIR)
+del _SRC_DIR, _sys
+
 from chain_config import (
     ROUTE_MAP_DIR,
     SKILL_CACHE_FILE,
@@ -574,9 +580,10 @@ def _evaluate_and_decide(
     # ── 技能分配与链条提取 ──
     target = result.get("agent", "")
     if target:
-        auto_skills, _manual_skills = _lookup_skills(target)
+        auto_skills, cache_manual_skills = _lookup_skills(target)
         result["auto_skills"] = auto_skills
-        result["manual_skills"] = sorted(matched_skills) if matched_skills else []
+        combined_manual = set(matched_skills) | set(cache_manual_skills)
+        result["manual_skills"] = sorted(combined_manual) if combined_manual else []
         agent_data = route_map.get("agents", {}).get(target, {})
         result["chain"] = agent_data.get("chain", [])
         result["chain_step_skills"] = agent_data.get("chain_step_skills", {})
@@ -600,6 +607,26 @@ def route(user_input: str) -> dict:
     """
     route_map = load_route_map()
     normalized = _normalize(user_input)
+
+    # ── 问号/感叹号/连续句号跳过路由 ─────────────────────
+    # 问号 ?？ 感叹号 !！ 任意位置出现跳过路由
+    # 连续句号 .. 或  。。（必须同类型，不混排）跳过路由
+    if ('？' in normalized or '?' in normalized
+        or '！' in normalized or '!' in normalized
+        or '..' in normalized or '。。' in normalized):
+        return {
+            "agent": "",
+            "confidence": 0.0,
+            "method": "question",
+            "details": {
+                "scores": [],
+                "matched_rules": [],
+                "fallback_reason": "检测到问号/感叹号/连续句号，跳过路由",
+            },
+            "auto_skills": [],
+            "manual_skills": [],
+        }
+    # ──────────────────────────────────────────────
 
     # 检查 overrides（命中则直接返回）
     override_result = _try_override(route_map, normalized)

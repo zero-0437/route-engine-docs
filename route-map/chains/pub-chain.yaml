@@ -5,7 +5,7 @@ description: "发版流程 — docs-writer 生成完全版+脱敏版文档 → f
 owner: docs-writer
 steps:
   - agent: docs-writer
-    goal: 生成完全版（CHANGELOG-FULL.md）和脱敏版（ROUTE-ENGINE-CHANGELOG.md）两份发布文档
+    goal: 生成完全版发布文档至 docs/CHANGELOG.md
     keywords: [generate-docs, 生成文档, 发布文档]
   - agent: file-ops
     goal: 将完全版文档上传至私有仓库，脱敏版文档上传至公开仓库

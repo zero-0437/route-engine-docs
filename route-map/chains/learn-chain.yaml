@@ -13,6 +13,7 @@ steps:
   - agent: reality-checker
     goal: 验证技能能被 skill_view 正确加载
     keywords: [verify, validate, 验证]
+    type: interactive
 chain_step_skills:
   prompt-engineer@0: [prompt-engineering]
   prompt-engineer@1: [skill-authoring]

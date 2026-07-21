@@ -21,7 +21,7 @@ SKILL_MAP = os.path.join(os.path.dirname(__file__), "..", "skill-map.yaml")
 INDEX_FILE = os.path.join(ROUTE_MAP_DIR, "index.yaml")
 ROUTES_DIR = os.path.join(ROUTE_MAP_DIR, "routes")
 
-# ── 近义词检测辅助函数（与 analyze-route-log.py 共享逻辑） ──
+# ── 近义词检测辅助函数（与 analyze_route_log.py 共享逻辑） ──
 _CJK_RE = re.compile(r'[\u4e00-\u9fff]+')
 
 

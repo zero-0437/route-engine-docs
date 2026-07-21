@@ -1,12 +1,11 @@
-# chain_name: spec-agent-chain
-# NOTE: 此 chain 未在 index.yaml 中显式注册 chain_ref，通过 chains/ 目录扫描发现。
-# 任何 agent 需要此流程时可在 index.yaml 的 chain_ref 中引用。
-chain_name: spec-agent-chain
-chain_keywords: [新项目管线, spec-chain, prd管线, 需求分析管线]
-description: "新项目管线 — 需求分析→制定计划→任务拆解→批量实现→并行审查→验证门控→收尾"
-owner: spec-agent
+# chain_name: new-project-chain
+# 新项目全管线 — superpowers Phase 1~5 整合
+chain_name: new-project-chain
+chain_keywords: [新项目管线, 全管线, prd管线, 需求分析管线, superpowers]
+description: "新项目全管线 — 需求分析→制定计划→任务拆解→批量实现→并行审查→验证门控→收尾"
+owner: pm-agent
 steps:
-  - agent: spec-agent
+  - agent: pm-agent
     goal: brainstorming — 需求分析、产出设计文档
     keywords: [brainstorming, design, 需求分析]
     completion_contract:
@@ -60,10 +59,10 @@ steps:
         description: "Git 工作区干净，PR 已提交"
         verify_command: "git status --porcelain | head -5"
 chain_step_skills:
-  spec-agent@0: [brainstorming, architecture-integrity-check]
-  spec-agent@1: [writing-plans]
-  spec-agent@2: [architecture-integrity-check]
-  spec-agent@3: []                         # Step 3: 批量实现 by programmer
-  spec-agent@4: []                         # Step 4: 并行审查（skills in branches）
-  spec-agent@5: [verification-before-completion]
-  spec-agent@6: [finishing-a-development-branch]
+  pm-agent@0: [product-manager, architecture-integrity-check]
+  pm-agent@1: [writing-plans]
+  pm-agent@2: [architecture-integrity-check]
+  pm-agent@3: []                         # Step 3: 批量实现 by programmer
+  pm-agent@4: []                         # Step 4: 并行审查（skills in branches）
+  pm-agent@5: [verification-before-completion]
+  pm-agent@6: [finishing-a-development-branch]

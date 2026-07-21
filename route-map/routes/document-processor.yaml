@@ -51,11 +51,11 @@ rules:
 
   # ── 特定格式处理 ───────────────────────────────────────
   - type: regex
-    pattern: \b(PDF|Word|Excel|PPT|OCR)\b
+    pattern: (?<![a-zA-Z])(PDF|Word|Excel|PPT|OCR)(?![a-zA-Z])
     weight: 0.9
     skills: []
   - type: regex
-    pattern: \b(docx)\b
+    pattern: (?<![a-zA-Z])(docx|DOCX)(?![a-zA-Z])
     weight: 0.8
     skills: []
   - type: regex

@@ -339,3 +339,45 @@ tests/
 7. **本轮链传递修复**：route_engine.py chain 数据传递 4 个问题全部修复，_validate_chain() 增加预防性校验
 8. **双评审流程**：新增 dual-review agent + 路由规则，支持"双评审"短语触发 spec→code 两步评审链
 9. **发版链**：新建 pub-chain 将发版流程固化为可复用 chain，docs-writer → file-ops 自动流水线
+
+---
+
+## 八、v2.5 发布 — 安全体系 + 规则瘦身（2026-07-05）
+
+### 8.1 安全体系四层架构
+
+| 层级 | 名称 | 说明 |
+|------|------|------|
+| Layer 1 | 全局守卫 | MAX_TOTAL_ITERATIONS=100, CHAIN_TIMEOUT=3600s, 状态文件原子写入 |
+| Layer 2 | Checkpoint 恢复 | 5 字段持久化（step_idx/completed_outputs/context_diff_path/context_last_output/total_iterations） |
+| Layer 3 | 人工介入 | rescue(拯救) / kill(终止) / pause(暂停) 中英文别名 |
+| Layer 4 | Verification Gate | VERIFIED / VERIFICATION_FAILED / NO_CONTRACT 状态码 |
+
+### 8.2 规则瘦身
+
+- 全量规则：285 → 216 条（-24%）
+- Top 4 Agent：124 → 55 条（-56%），消除所有边界重叠规则
+- 新增 `analyze-route-log.py analyze` 子命令 + near-synonym 冗余检测（CJK 编辑距离）
+
+### 8.3 关键架构改进
+
+1. **共享配置抽象**：chain_config.py 统一路径计算和 YAML 加载
+2. **Chain mode 字段**：YAML chain 定义新增 mode（orchestrator/stepwise）
+3. **公开版（src/）同步**：脱敏源码版本保持与内部版一致
+
+## 九、v2.6 Hotfix — 输入检测跳过路由（2026-07-06）
+
+### 9.1 输入检测规则
+
+- 问号 `?`/`？` 结尾 → 跳过路由，返回 method="question"
+- 感叹号 `!`/`！` 任意位置 → 跳过路由
+- 连续句号 `..`/`。。`（同类型，不混排）→ 跳过路由
+
+### 9.2 验证
+
+| 测试场景 | 输入 | 预期 | 结果 |
+|---------|------|------|------|
+| 问号路由跳过 | "这是什么？" | method="question" | ✅ |
+| 感叹号路由跳过 | "紧急！" | method="question" | ✅ |
+| 连续句号路由跳过 | "举个例子。。" | method="question" | ✅ |
+| 混合标点（不跳过） | "修复 bug。谢谢" | 正常路由 | ✅ |

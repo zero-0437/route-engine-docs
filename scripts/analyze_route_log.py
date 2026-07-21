@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-analyze-route-log.py — 路由日志分析维护脚本
+analyze_route_log.py — 路由日志分析维护脚本
 
 子命令:
   summary   [默认] 输出统计摘要、Agent 排名、Flagged 条目清单及改进建议
